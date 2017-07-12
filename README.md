@@ -1,2 +1,2 @@
 # mbed-clp
-Instruction list programmed CLP based on mbed
+Instruction list programmed PLC based on mbed
