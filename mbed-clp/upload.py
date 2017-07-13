@@ -4,7 +4,7 @@ import serial # para comunicar com o kl25z
 import time # para separa o envio dos blocos; talvez não seja necessário
 
 # Inicializa a comunicação serial
-porta = 'COM5'
+porta = 'COM4'
 ser = serial.Serial(porta,9600)
 
 ###
@@ -27,15 +27,15 @@ for line in programa:
 	pedacos.insert(2,'') # Insere um pedaço para o modificador
 	# Testa se há operação adiada
 	if pedacos[1].endswith('('):
-		pedacos[2] = pedaços[2] + '('
+		pedacos[2] = pedacos[2] + '('
 		pedacos[1] = pedacos[1].rstrip('(')
 	# Testa se há inversão
-	if pedacos[1].endswith('N'):
-		pedacos[2] = pedaços[2] + 'N'
+	if pedacos[1].endswith('N') and not(pedacos[1] == "TON"):		#correcao para o TON
+		pedacos[2] = pedacos[2] + 'N'
 		pedacos[1] = pedacos[1].rstrip('N')
 	# Testa se há condicional
 	if pedacos[1].endswith('C'):
-		pedacos[2] = pedaços[2] + 'C'
+		pedacos[2] = pedacos[2] + 'C'
 		pedacos[1] = pedacos[1].rstrip('C')
 	# Ajusta o tamanho do comando e do modificador
 	pedacos[1] = pedacos[1].ljust(4,' ') # comando
@@ -71,6 +71,7 @@ for bloco in blocos:
 ###
 ### Comunicação
 ###
+print("Programa Lido")
 import msvcrt # Para detectar que uma tecla foi apertada
 while not msvcrt.kbhit(): # Enquanto nenhuma tecla for apertada
 	if ser.in_waiting: # Se chegar coisa na serial, imprime

@@ -1,6 +1,7 @@
 LD I0
-JMPC alvograndepara
-LDN I1
-JMP fim
-alvograndepara: LD I1
-fim: ST Q0
+AND( I0
+TON T0,2000
+TOF T1,4000
+AND I1
+)
+STN Q0

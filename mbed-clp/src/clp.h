@@ -16,7 +16,9 @@
 #define RETv 16
 #define CTUv 17
 #define CTDv 18
-#define CTUDV 19
+#define CTUDv 19
 #define TPv 20
 #define TONv 21
 #define TOFv 22
+#define sda PTC9
+#define scl PTC8

@@ -3,16 +3,17 @@
 #include "TextLCD.h"
 #include <stack>        //Biblioteca Pilha
 #include "string.h"
-
 #include "clp.h"
+#include "rtos.h"
 
+//#include <cstdint.h>
 using namespace std;
 int tamanho = 0; //Colocar la em cima
 int PC;
 unsigned int funcao_retorno;
 Serial pc(USBTX, USBRX, 9600); // tx, rx
 char buff[20];
-Timeout timer[4];
+//Timeout timer[4];
 TextLCD lcd(PTE20, PTE21, PTE22,PTE23, PTE29, PTE30); // rs, e, d4-d7
 /*
   BusIn in(PTD0, PTD1, PTD2, PTD3, PTD4, PTD5, PTD6, PTD7);
@@ -24,6 +25,11 @@ DigitalOut q0(LED1);
 DigitalOut led(LED2);
 DigitalOut ledFisico(PTD3);
 //DigitalOut azul(LED3);
+
+//PORTA DE COMPUNICAÇÂO I2C
+I2C i2c(sda,scl);
+const int addr = 9<<1; //Endereçamento do I2C
+
 char acumulador;
 char M[8],I[8],Q[8];
 char T[4], QT[4];
@@ -96,47 +102,28 @@ int readVal(int operando){
 // deve ser chamada
 void OpA (int operando, int mod){
   switch(pilha_logica.top()){
-    case AND: acumulador=pilha.top() && acumulador;
+    case ANDv: acumulador=pilha.top() && acumulador;
       break;
-    case OR: acumulador=pilha.top() || acumulador;
+    case ORv: acumulador=pilha.top() || acumulador;
       break;
-    case XOR: acumulador=pilha.top() ^ acumulador;
+    case XORv: acumulador=pilha.top() ^ acumulador;
       break;
-    case GT: acumulador=pilha.top() > acumulador;
+    case GTv: acumulador=pilha.top() > acumulador;
       break;
-    case GE: acumulador=pilha.top() >= acumulador;
+    case GEv: acumulador=pilha.top() >= acumulador;
       break;
-    case EQ: acumulador=pilha.top() == acumulador;
+    case EQv: acumulador=pilha.top() == acumulador;
       break;
-    case NE: acumulador=pilha.top() != acumulador;
+    case NEv: acumulador=pilha.top() != acumulador;
       break;
-    case LT: acumulador=pilha.top() < acumulador;
+    case LTv: acumulador=pilha.top() < acumulador;
       break;
-    case LE: acumulador=pilha.top() <= acumulador;
+    case LEv: acumulador=pilha.top() <= acumulador;
       break;
     }
     pilha.pop();
     pilha_logica.pop();
   }
-/*if(pilha_logica.top()  == ANDv)
-    acumulador=pilha.pop() && acumulador;
-  else if(pilha_logica.top() == ORv)
-    acumulador=pilha.pop() || acumulador;
-  else if(pilha_logica.top() == XORv)
-    acumulador=pilha.pop() ^ acumulador;
-  else if(pilha_logica.top() == GTv)
-    acumulador=pilha.pop() > acumulador;
-  else if(pilha_logica.top() == GEv)
-    acumulador=pilha.pop() >= acumulador;
-  else if(pilha_logica.top() == EQv)
-    acumulador=pilha.pop() == acumulador;
-  else if(pilha_logica.top() == NEv)
-    acumulador=pilha.pop() != acumulador;
-  else if(pilha_logica.top() == LTv)
-    acumulador=pilha.pop() < acumulador;
-  else if(pilha_logica.top() == LEv)
-    acumulador=pilha.pop() <= acumulador;
-    */
 // Instrução JMP (JUMP - Desvia para o rótulo Nome_do_Rótulo)
 void JMP (int mod, char operando[17]){
   unsigned int i;
@@ -162,6 +149,7 @@ void RET (int mod){
 }
 // Instrução CTU (Contador Crescente)------------------------------------------
 // Para CTU - Entradas: CU, R, PV ; Saídas: CV, Q------------------------------
+/*
 void CTU (int mod, char PV){
   char CU; //COUNT UP - Entrada de contagem crescente
   char R; //RESET - Reinicia o contador, faz CV=0
@@ -310,20 +298,21 @@ void CTUD (char mod, char PV){
     }
   }
 }
+*/
 // Intrução TP (Temporizador de pulso)-----------------------------------------
-void TP(int pos){
-  //T[pos] = 0;
-  QT[pos] = 0;
+void TP(const void* pos){
+  T[(int)pos] = 0;
+  QT[(int)pos] = 0;
 }
 // Instrução TON (Temporizador com retardo para ligar)-------------------------
-void TON(int pos){
-  //T[pos] = 0;
-  QT[pos] = 1;
+void TON(const void* pos){
+  T[(int)pos] = 0;
+  QT[(int)pos] = 1;
 }
 // Instução TOF (Temporizador com retardo para desligar)-----------------------
-void TON(int pos){
-  //T[pos] = 0;
-  QT[pos] = 0;
+void TOF(const void* pos){
+  T[(int)pos] = 0;
+  QT[(int)pos] = 0;
 }
 // Converte o operador para valores numéricos
 int val_operador(char operador[4]){
@@ -454,36 +443,58 @@ void executa_instrucao(instrucao x){
            break;
     case RETv: RET(mod);
            break;
+/*
     case CTUv: CTU(mod, x.PV);
            break;
     case CTDv: CTD(mod, x.PV);
            break;
     case CTUDv: CTUD(mod, x.PV);
            break;
+*/
     case TPv:
     case TONv:
     case TOFv:      // Ex: TP T0,1000
-          int pos = x.operando[1]  - '0';		// definindo qual memória de timer será utilizada
+          static int acumulador_antigo;
+          int pos = x.operando[1]  - '0';       // definindo qual memória de timer será utilizada
           char *tempo_str;
-          tempo_str = strtok(x.operando,",");		// isolando somente o periodo dentro da string operando
+          tempo_str = strtok(x.operando," ,");		// isolando somente o periodo dentro da string operando
+          tempo_str = strtok(NULL," ,");
           unsigned long PT = atoi(tempo_str);	// convertendo o resto da string pra int
-          if(acumulador == 0)
+          if(acumulador == 0)   // desabilitando o Temporizador
             T[pos] = 0;
-          if((acumulador == 1 && T[pos] == 0 )&& operador == TPv){  // TP
-            timer[pos].attach(&TP(pos), (float)PT/1000);	// habilitando a interrupção para cada tipo de timer
+
+          // TP
+          if(((acumulador==1)&&(acumulador_antigo == 0))&& ( T[pos] == 0 && operador == TPv)){
+            RtosTimer TP_timer(&TP, osTimerOnce ,(void *)pos);
+            TP_timer.start(PT);
+            //timer[pos].attach(&TP(pos), (float)PT/1000);	// habilitando a interrupção para cada tipo de timer
             T[pos] = 1;
-            QT[pos] == 1;
+            QT[pos] = 1;                               // Habilitando a saida
           }
-          if((acumulador == 1 && T[pos] == 0 )&& operador == TONv){  // TON
-            timer[pos].attach(&TON(pos), (float)PT/1000);	// habilitando a interrupção para cada tipo de timer
+
+          // TON
+          if((acumulador==1&&acumulador_antigo == 0) && (T[pos] == 0 && operador == TONv)){
+            //timer[pos].attach(&TON, (float)PT/1000);	// habilitando a interrupção para cada tipo de timer
+            RtosTimer TON_timer(&TON, osTimerOnce ,(void*)pos);
+            TON_timer.start(PT);
             T[pos] = 1;
-            QT[pos] == 0;
+            QT[pos] = 0;
           }
-          if((acumulador == 1 && T[pos] == 0 )&& operador == TOFv){  // TOF
-            timer[pos].attach(&TOF(pos), (float)PT/1000);	// habilitando a interrupção para cada tipo de timer
+          if(acumulador == 0 && operador == TONv)
+            QT[pos] = 0;
+
+          // TOF
+          if(((acumulador==0)&&(acumulador_antigo==1)) && (T[pos] == 0 && operador == TOFv)){
+            //timer[pos].attach(&TOF, (float)PT/1000);	// habilitando a interrupção para cada tipo de timer
+            RtosTimer TOF_timer(&TOF, osTimerOnce ,(void*)pos);
+            TOF_timer.start(PT);
             T[pos] = 1;
-            QT[pos] == 0;
+            QT[pos] = 1;
           }
+          if(acumulador==1 && (T[pos] == 0 && operador == TOFv))  // TOF ( para deixar ligado enquanto o acumulador for 1)
+            QT[pos] = 1;
+
+          acumulador_antigo = acumulador;   // memorizando o valor antigo do acumulador
           acumulador = QT[pos];
           break;
     }
@@ -514,15 +525,31 @@ void upload(){
 }
 //-----------------------------------------------------------------------------
 int main(){
+  char cmd
   pc.printf("Inicializacao\n");
   pc.attach(&upload);
   Q[0] = 0;
   led = 0;
+///////////////////////////////////////////////////////////
+  char adr_entrada = 0, adr_saida = 2;
+  char I=0, i_byte, q_byte;
+  char vet[2];
+//////////////////////////////////////////////////////////////
   while(1){
     // lendo as ENTRADAS
-    I[0] = i0.read();
-    I[1] = i1.read();
-    ledFisico = 0;
+    //I[0] = i0.read();
+    //I[1] = i1.read();
+    //ledFisico = 0;
+
+    // Lendo as ENTRADAS pelo I2C
+
+    i2c.write(addr, &adr_entrada, 1);
+    i2c.read(addr, &I, 1);
+    //Escrevendo pelo I2C
+    vet[0] = adr_saida;
+    vet[1] = I;
+    i2c.write(addr, vet, 2);
+    wait(0.2);
     //Execução do programa
     if (tamanho>0){
       for(PC = 0; PC < tamanho; PC++){
@@ -531,9 +558,7 @@ int main(){
         //pc.printf("%d",val_operador(programa[i].operador));
       }
     }
-    //Atualizando as SAIDA
-    ledFisico = 1;
-    q0.write(Q[0]);
+
   }
   return 0;
 }
